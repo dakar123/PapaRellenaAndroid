@@ -1,18 +1,20 @@
 package com.example.paparellena.ui
 
 import android.net.nsd.NsdServiceInfo
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -20,174 +22,175 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun MenuScreenContent(
     discoveredGames: List<NsdServiceInfo>,
-    onHostGame: (String, Int) -> Unit, // username, timeInMinutes
-    onJoinGame: (String, NsdServiceInfo) -> Unit, // username, service
+    onHostGame: (String, Int) -> Unit,
+    onJoinGame: (String, NsdServiceInfo) -> Unit,
     onRefreshDiscovery: () -> Unit
 ) {
-    var showHostDialog by remember { mutableStateOf(false) }
-    var showJoinDialog by remember { mutableStateOf(false) }
+    var showNameDialog by remember { mutableStateOf(false) }
+    var showJoinList by remember { mutableStateOf(false) }
     var selectedService by remember { mutableStateOf<NsdServiceInfo?>(null) }
     var username by remember { mutableStateOf("") }
-    
-    val timeOptions = listOf(1, 2, 4)
-    var selectedTime by remember { mutableIntStateOf(timeOptions[0]) }
+    var selectedTime by remember { mutableIntStateOf(60) }
+    var isHostingAction by remember { mutableStateOf(true) }
+
+    val potatoBrown = Color(0xFF8B4513)
+    val potatoYellow = Color(0xFFF4D03F)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .background(Color(0xFFFDF5E6))
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .clip(RoundedCornerShape(40.dp))
+                .background(potatoBrown),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("🥔", fontSize = 64.sp)
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         Text(
             text = "PAPA RELLENA",
-            fontSize = 40.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+            fontSize = 42.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = potatoBrown
         )
         
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        Text("Partidas Disponibles:", fontWeight = FontWeight.Bold)
-        
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(vertical = 16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            if (discoveredGames.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Buscando partidas...", color = Color.Gray)
+        Text(
+            text = "¡No dejes que se queme!",
+            fontSize = 18.sp,
+            color = Color(0xFF5D4037)
+        )
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        if (!showJoinList) {
+            Button(
+                onClick = { 
+                    isHostingAction = true
+                    showNameDialog = true 
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = potatoBrown)
+            ) {
+                Text("CREAR PARTIDA", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = { 
+                    showJoinList = true
+                    onRefreshDiscovery()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = potatoYellow, contentColor = potatoBrown)
+            ) {
+                Text("BUSCAR PARTIDAS", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Partidas Disponibles", fontWeight = FontWeight.Bold, color = potatoBrown)
+                IconButton(onClick = onRefreshDiscovery) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refrescar", tint = potatoBrown)
                 }
-            } else {
-                LazyColumn {
-                    items(discoveredGames) { service ->
-                        ListItem(
-                            headlineContent = { Text(service.serviceName) },
-                            supportingContent = { 
-                                val hostAddr = service.host?.hostAddress ?: "Resolviendo..."
-                                Text("$hostAddr:${service.port}") 
-                            },
-                            modifier = Modifier.clickable {
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                items(discoveredGames) { service ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable {
                                 selectedService = service
-                                showJoinDialog = true
-                            }
+                                isHostingAction = false
+                                showNameDialog = true
+                            },
+                        colors = CardDefaults.cardColors(containerColor = Color.White)
+                    ) {
+                        Text(
+                            text = service.serviceName,
+                            modifier = Modifier.padding(16.dp),
+                            color = potatoBrown
                         )
-                        HorizontalDivider()
                     }
                 }
             }
-        }
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = onRefreshDiscovery,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Refrescar")
-            }
             
             Button(
-                onClick = { showHostDialog = true },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                onClick = { showJoinList = false },
+                modifier = Modifier.padding(top = 16.dp)
             ) {
-                Text("Crear Partida")
+                Text("VOLVER")
             }
         }
     }
 
-    if (showHostDialog) {
+    if (showNameDialog) {
         AlertDialog(
-            onDismissRequest = { showHostDialog = false },
-            title = { Text("Configurar Partida") },
+            onDismissRequest = { showNameDialog = false },
+            title = { Text(if (isHostingAction) "Configurar Partida" else "Unirse a Partida") },
             text = {
                 Column {
                     OutlinedTextField(
                         value = username,
                         onValueChange = { username = it },
-                        label = { Text("Tu Nombre (Nombre de la Partida)") },
+                        label = { Text("Tu Apodo") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Tiempo de partida:", fontWeight = FontWeight.Bold)
-                    Column(Modifier.selectableGroup()) {
-                        timeOptions.forEach { time ->
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                                    .selectable(
-                                        selected = (time == selectedTime),
-                                        onClick = { selectedTime = time },
-                                        role = Role.RadioButton
-                                    )
-                                    .padding(horizontal = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = (time == selectedTime),
-                                    onClick = null 
-                                )
-                                Text(
-                                    text = "$time min",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.padding(start = 16.dp)
-                                )
+                    
+                    if (isHostingAction) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        val minutes = selectedTime / 60
+                        val seconds = selectedTime % 60
+                        Text("Tiempo máximo: ${minutes}m ${seconds}s")
+                        Slider(
+                            value = selectedTime.toFloat(),
+                            onValueChange = { selectedTime = it.toInt() },
+                            valueRange = 60f..300f,
+                            steps = 3
+                        )
+                        Text(
+                            "El juego terminará aleatoriamente en los últimos 10 segundos.",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (username.isNotBlank()) {
+                            showNameDialog = false
+                            if (isHostingAction) {
+                                onHostGame(username, selectedTime)
+                            } else {
+                                selectedService?.let { onJoinGame(username, it) }
                             }
                         }
                     }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (username.isNotBlank()) {
-                            onHostGame(username, selectedTime)
-                            showHostDialog = false
-                        }
-                    }
                 ) {
-                    Text("Crear")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showHostDialog = false }) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    }
-
-    if (showJoinDialog && selectedService != null) {
-        AlertDialog(
-            onDismissRequest = { showJoinDialog = false },
-            title = { Text("Unirse a: ${selectedService?.serviceName}") },
-            text = {
-                OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    label = { Text("Tu Nombre") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (username.isNotBlank()) {
-                            onJoinGame(username, selectedService!!)
-                            showJoinDialog = false
-                        }
-                    }
-                ) {
-                    Text("Entrar")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showJoinDialog = false }) {
-                    Text("Cancelar")
+                    Text("ACEPTAR")
                 }
             }
         )

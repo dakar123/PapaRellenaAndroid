@@ -2,12 +2,10 @@ package com.example.paparellena
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.os.*
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -59,11 +57,26 @@ class MainActivity : ComponentActivity() {
             var currentScreen by remember { mutableStateOf("menu") }
             var username by remember { mutableStateOf("") }
             var players by remember { mutableStateOf(listOf<Player>()) }
+            var maxTimeSeconds by remember { mutableIntStateOf(60) }
             var timeLeft by remember { mutableIntStateOf(60) }
             var countdown by remember { mutableIntStateOf(0) }
             var discoveredGames by remember { mutableStateOf(listOf<NsdServiceInfo>()) }
             var isGameOver by remember { mutableStateOf(false) }
             var gameResultText by remember { mutableStateOf("") }
+            var holdTimeMs by remember { mutableLongStateOf(0L) }
+
+            val hasPotato = players.find { it.id == myId }?.hasPotato == true
+            LaunchedEffect(hasPotato) {
+                if (hasPotato) {
+                    val start = System.currentTimeMillis()
+                    while (isActive) {
+                        holdTimeMs = System.currentTimeMillis() - start
+                        delay(50)
+                    }
+                } else {
+                    holdTimeMs = 0L
+                }
+            }
 
             val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES)
@@ -95,9 +108,6 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(currentScreen) {
                 if (currentScreen == "menu") {
                     startDiscovery { discoveredGames = it }
-                    soundManager.stopBackgroundMusic()
-                } else if (currentScreen == "game") {
-                    soundManager.playBackgroundMusic()
                 } else {
                     nsdHelper.stopDiscovery()
                 }
@@ -108,40 +118,33 @@ class MainActivity : ComponentActivity() {
                     when (msg.type) {
                         GameMessage.TYPE_PLAYER_LIST -> {
                             val listType = object : TypeToken<List<Player>>() {}.type
-                            val newList: List<Player> = gson.fromJson(msg.content, listType)
-                            
-                            // Si el dueño de la papa cambió, hacemos vibrar a todos y sonamos el 'pass'
-                            val oldPotatoOwner = players.find { it.hasPotato }?.id
-                            val newPotatoOwner = newList.find { it.hasPotato }?.id
-                            
-                            if (oldPotatoOwner != null && newPotatoOwner != null && oldPotatoOwner != newPotatoOwner) {
-                                soundManager.playPassPotatoSound()
-                                vibrateAll(context)
-                            }
-                            
-                            players = newList
+                            players = gson.fromJson(msg.content, listType)
                         }
                         GameMessage.TYPE_START -> {
                             currentScreen = "game"
                             isGameOver = false
+                            soundManager.playBackgroundMusic()
                         }
                         GameMessage.TYPE_COUNTDOWN -> {
                             countdown = msg.content.toInt()
-                            if (countdown > 0) soundManager.playTickSound()
                         }
                         GameMessage.TYPE_TICK -> {
                             timeLeft = msg.content.toInt()
+                            soundManager.playTickSound()
                         }
                         GameMessage.TYPE_GAME_OVER -> {
                             isGameOver = true
                             gameResultText = "¡Perdió ${msg.content}!"
                             soundManager.playGameOverSound()
                         }
+                        GameMessage.TYPE_PASS_POTATO -> {
+                            soundManager.playPassPotatoSound()
+                        }
                     }
                 }
                 onDispose { 
                     messageCallback = null
-                    soundManager.stopBackgroundMusic()
+                    soundManager.release()
                 }
             }
 
@@ -151,7 +154,7 @@ class MainActivity : ComponentActivity() {
                     onHostGame = { name, time ->
                         checkWifiAndPermissions {
                             username = name
-                            timeLeft = time * 60
+                            maxTimeSeconds = time
                             isHost = true
                             startHost(name)
                             currentScreen = "lobby"
@@ -174,7 +177,7 @@ class MainActivity : ComponentActivity() {
                     isHost = isHost,
                     onStartGame = {
                         if (isHost) {
-                            hostStartGame(timeLeft)
+                            hostStartGame(maxTimeSeconds)
                         }
                     },
                     onBack = {
@@ -188,9 +191,10 @@ class MainActivity : ComponentActivity() {
                         currentPlayerId = myId,
                         timeLeftSeconds = timeLeft,
                         countdown = countdown,
+                        holdTimeMs = holdTimeMs,
                         onPassPotato = { targetId: String ->
                             if (!isGameOver && countdown == 0) {
-                                val msg = GameMessage(GameMessage.TYPE_PASS_POTATO, myId, username, targetId)
+                                val msg = GameMessage(GameMessage.TYPE_PASS_POTATO, myId, targetId)
                                 client?.sendMessage(msg)
                             }
                         }
@@ -304,66 +308,49 @@ class MainActivity : ComponentActivity() {
                     for (i in masterPlayers.indices) {
                         masterPlayers[i] = masterPlayers[i].copy(hasPotato = masterPlayers[i].id == targetId)
                     }
-                    masterPlayers.shuffle()
                     broadcastPlayerList()
                 }
+                server?.broadcast(msg) // Re-broadcast for sounds
             }
-        }
-    }
-
-    private fun hostStartGame(selectedTimeSeconds: Int) {
-        CoroutineScope(Dispatchers.Default).launch {
-            server?.broadcast(GameMessage(GameMessage.TYPE_START, myId, ""))
-            
-            for (i in 3 downTo 1) {
-                server?.broadcast(GameMessage(GameMessage.TYPE_COUNTDOWN, myId, i.toString()))
-                delay(1000)
-            }
-            server?.broadcast(GameMessage(GameMessage.TYPE_COUNTDOWN, myId, "0"))
-
-            synchronized(masterPlayers) {
-                if (masterPlayers.isNotEmpty()) {
-                    val randomIndex = (0 until masterPlayers.size).random()
-                    for (i in masterPlayers.indices) {
-                        masterPlayers[i] = masterPlayers[i].copy(hasPotato = i == randomIndex)
-                    }
-                }
-            }
-            broadcastPlayerList()
-
-            val randomDuration = selectedTimeSeconds - Random.nextInt(0, 15)
-            var currentTimer = randomDuration
-            
-            while (currentTimer > 0) {
-                delay(1000)
-                currentTimer--
-                server?.broadcast(GameMessage(GameMessage.TYPE_TICK, myId, currentTimer.toString()))
-            }
-            
-            val loser = synchronized(masterPlayers) { masterPlayers.find { it.hasPotato } }
-            server?.broadcast(GameMessage(GameMessage.TYPE_GAME_OVER, myId, loser?.name ?: "Nadie"))
         }
     }
 
     private fun broadcastPlayerList() {
-        val json = gson.toJson(masterPlayers)
-        server?.broadcast(GameMessage(GameMessage.TYPE_PLAYER_LIST, myId, json))
+        val msg = GameMessage(GameMessage.TYPE_PLAYER_LIST, "server", "Host", gson.toJson(masterPlayers))
+        server?.broadcast(msg)
     }
 
-    private fun vibrateAll(context: Context) {
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
+    private fun hostStartGame(maxTime: Int) {
+        val startMsg = GameMessage(GameMessage.TYPE_START, "server", "Host", "")
+        server?.broadcast(startMsg)
+        
+        CoroutineScope(Dispatchers.Default).launch {
+            for (i in 3 downTo 1) {
+                server?.broadcast(GameMessage(GameMessage.TYPE_COUNTDOWN, "server", "Host", i.toString()))
+                delay(1000)
+            }
+            server?.broadcast(GameMessage(GameMessage.TYPE_COUNTDOWN, "server", "Host", "0"))
+            
+            // Assign potato to a random player
+            synchronized(masterPlayers) {
+                val randomIndex = Random.nextInt(masterPlayers.size)
+                for (i in masterPlayers.indices) {
+                    masterPlayers[i] = masterPlayers[i].copy(hasPotato = i == randomIndex)
+                }
+                broadcastPlayerList()
+            }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(150, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(150)
+            val reduction = Random.nextInt(11)
+            var currentT = maxTime - reduction
+
+            while (currentT > 0) {
+                server?.broadcast(GameMessage(GameMessage.TYPE_TICK, "server", "Host", currentT.toString()))
+                delay(1000)
+                currentT--
+            }
+            
+            val loser = masterPlayers.find { it.hasPotato }?.name ?: "Alguien"
+            server?.broadcast(GameMessage(GameMessage.TYPE_GAME_OVER, "server", "Host", loser))
         }
     }
 }
