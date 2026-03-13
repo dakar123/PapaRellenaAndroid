@@ -95,6 +95,9 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(currentScreen) {
                 if (currentScreen == "menu") {
                     startDiscovery { discoveredGames = it }
+                    soundManager.stopBackgroundMusic()
+                } else if (currentScreen == "game") {
+                    soundManager.playBackgroundMusic()
                 } else {
                     nsdHelper.stopDiscovery()
                 }
@@ -105,7 +108,18 @@ class MainActivity : ComponentActivity() {
                     when (msg.type) {
                         GameMessage.TYPE_PLAYER_LIST -> {
                             val listType = object : TypeToken<List<Player>>() {}.type
-                            players = gson.fromJson(msg.content, listType)
+                            val newList: List<Player> = gson.fromJson(msg.content, listType)
+                            
+                            // Si el dueño de la papa cambió, hacemos vibrar a todos y sonamos el 'pass'
+                            val oldPotatoOwner = players.find { it.hasPotato }?.id
+                            val newPotatoOwner = newList.find { it.hasPotato }?.id
+                            
+                            if (oldPotatoOwner != null && newPotatoOwner != null && oldPotatoOwner != newPotatoOwner) {
+                                soundManager.playPassPotatoSound()
+                                vibrateAll(context)
+                            }
+                            
+                            players = newList
                         }
                         GameMessage.TYPE_START -> {
                             currentScreen = "game"
@@ -113,6 +127,7 @@ class MainActivity : ComponentActivity() {
                         }
                         GameMessage.TYPE_COUNTDOWN -> {
                             countdown = msg.content.toInt()
+                            if (countdown > 0) soundManager.playTickSound()
                         }
                         GameMessage.TYPE_TICK -> {
                             timeLeft = msg.content.toInt()
@@ -120,10 +135,14 @@ class MainActivity : ComponentActivity() {
                         GameMessage.TYPE_GAME_OVER -> {
                             isGameOver = true
                             gameResultText = "¡Perdió ${msg.content}!"
+                            soundManager.playGameOverSound()
                         }
                     }
                 }
-                onDispose { messageCallback = null }
+                onDispose { 
+                    messageCallback = null
+                    soundManager.stopBackgroundMusic()
+                }
             }
 
             when (currentScreen) {
@@ -231,6 +250,7 @@ class MainActivity : ComponentActivity() {
         nsdHelper.unregisterService()
         masterPlayers.clear()
         isHost = false
+        soundManager.stopBackgroundMusic()
     }
 
     private fun startHost(name: String) {
@@ -311,10 +331,9 @@ class MainActivity : ComponentActivity() {
             }
             broadcastPlayerList()
 
-            // Random time between selectedTime - 15s and selectedTime + 5s (approximate)
             val randomDuration = selectedTimeSeconds - Random.nextInt(0, 15)
             var currentTimer = randomDuration
-
+            
             while (currentTimer > 0) {
                 delay(1000)
                 currentTimer--
@@ -329,5 +348,22 @@ class MainActivity : ComponentActivity() {
     private fun broadcastPlayerList() {
         val json = gson.toJson(masterPlayers)
         server?.broadcast(GameMessage(GameMessage.TYPE_PLAYER_LIST, myId, json))
+    }
+
+    private fun vibrateAll(context: Context) {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(150, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(150)
+        }
     }
 }
