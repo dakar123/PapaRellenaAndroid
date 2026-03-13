@@ -7,6 +7,7 @@ public class GameMessage {
     public static final String TYPE_GAME_OVER = "GAME_OVER";
     public static final String TYPE_TICK = "TICK";
     public static final String TYPE_PLAYER_LIST = "PLAYER_LIST";
+    public static final String TYPE_COUNTDOWN = "COUNTDOWN";
 
     private String type;
     private String senderId;

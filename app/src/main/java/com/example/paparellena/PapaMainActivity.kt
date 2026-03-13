@@ -67,18 +67,13 @@ class PapaMainActivity : ComponentActivity() {
                     players = players,
                     currentPlayerId = currentPlayerId,
                     timeLeftSeconds = timeLeft,
-                    onPassPotato = { targetId ->
+                    countdown = 0,
+                    onPassPotato = { targetId: String ->
                         players = players.map { 
                             it.copy(
                                 hasPotato = it.id == targetId,
                                 isRequesting = if (it.id == targetId) false else it.isRequesting
                             ) 
-                        }
-                    },
-                    onReceivePotato = { },
-                    onRequestPotato = {
-                        players = players.map {
-                            if (it.id == currentPlayerId) it.copy(isRequesting = true) else it
                         }
                     }
                 )

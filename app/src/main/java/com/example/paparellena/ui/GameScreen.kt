@@ -1,6 +1,11 @@
 package com.example.paparellena.ui
 
-import androidx.compose.animation.animateColorAsState
+import android.content.Context
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import androidx.compose.animation.animateColor
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,47 +21,65 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
-
-data class Player(
-    val id: String,
-    val name: String,
-    val hasPotato: Boolean = false,
-    val isRequesting: Boolean = false
-)
 
 @Composable
 fun GameScreen(
     players: List<Player>,
     currentPlayerId: String,
     timeLeftSeconds: Int,
-    onPassPotato: (String) -> Unit, // target player id
-    onReceivePotato: () -> Unit,
-    onRequestPotato: () -> Unit
+    countdown: Int,
+    onPassPotato: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val currentPlayer = players.find { it.id == currentPlayerId }
     val hasPotato = currentPlayer?.hasPotato ?: false
     
-    // Last 10 seconds red flash effect
-    val isUrgent = timeLeftSeconds in 1..10
+    // Vibrate when potato is received
+    LaunchedEffect(hasPotato) {
+        if (hasPotato) {
+            vibrate(context)
+        }
+    }
+
+    val isUrgent = timeLeftSeconds in 1..5
     val infiniteTransition = rememberInfiniteTransition(label = "flash")
-    val flashAlpha by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = if (isUrgent) 0.4f else 0f,
+    
+    // Background color animation for urgency
+    val urgentColor by infiniteTransition.animateColor(
+        initialValue = Color.Red.copy(alpha = 0.4f),
+        targetValue = Color.Yellow.copy(alpha = 0.4f),
+        animationSpec = infiniteRepeatable(
+            animation = tween(250, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "urgentBg"
+    )
+
+    // Background color animation for holding the potato
+    val holdingColor by infiniteTransition.animateColor(
+        initialValue = Color.Red.copy(alpha = 0.1f),
+        targetValue = Color.Red.copy(alpha = 0.6f),
         animationSpec = infiniteRepeatable(
             animation = tween(500, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "flashAlpha"
+        label = "holdingBg"
     )
+
+    val backgroundColor = when {
+        isUrgent -> urgentColor
+        hasPotato -> holdingColor
+        else -> MaterialTheme.colorScheme.background
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (isUrgent) Color.Red.copy(alpha = flashAlpha) else MaterialTheme.colorScheme.background)
+            .background(backgroundColor)
     ) {
         Column(
             modifier = Modifier
@@ -64,43 +87,44 @@ fun GameScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = if (hasPotato) "¡TIENES LA PAPA!" else "Busca la papa...",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(vertical = 24.dp),
-                color = if (hasPotato) Color.Red else MaterialTheme.colorScheme.onBackground
-            )
-
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(8.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                items(players) { player ->
-                    PlayerItem(
-                        player = player,
-                        isSelf = player.id == currentPlayerId,
-                        canReceive = hasPotato && player.id != currentPlayerId,
-                        onClick = {
-                            if (hasPotato && player.id != currentPlayerId) {
-                                onPassPotato(player.id)
-                            }
-                        }
+            if (countdown > 0) {
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = countdown.toString(),
+                        fontSize = 120.sp,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
-            }
+            } else {
+                Text(
+                    text = if (hasPotato) "¡TIENES LA PAPA!" else "¡PÁSALO!",
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(vertical = 24.dp),
+                    color = if (hasPotato || isUrgent) Color.Black else MaterialTheme.colorScheme.onBackground
+                )
 
-            if (!hasPotato) {
-                Button(
-                    onClick = onRequestPotato,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .padding(bottom = 16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFA500))
+                Text(
+                    text = "Tiempo: $timeLeftSeconds s",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isUrgent) Color.Red else MaterialTheme.colorScheme.onBackground
+                )
+
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(8.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Text("SOLICITAR PAPA", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    items(players) { player ->
+                        PlayerItem(
+                            player = player,
+                            isSelf = player.id == currentPlayerId,
+                            canReceive = hasPotato && player.id != currentPlayerId,
+                            onClick = { onPassPotato(player.id) }
+                        )
+                    }
                 }
             }
         }
@@ -114,18 +138,6 @@ fun PlayerItem(
     canReceive: Boolean,
     onClick: () -> Unit
 ) {
-    // Blinking effect if player is requesting
-    val infiniteTransition = rememberInfiniteTransition(label = "blink")
-    val blinkColor by animateColorAsState(
-        targetValue = if (player.isRequesting) Color.Yellow else Color.Transparent,
-        animationSpec = if (player.isRequesting) {
-            infiniteRepeatable(tween(500), RepeatMode.Reverse)
-        } else {
-            snap()
-        },
-        label = "blinkColor"
-    )
-
     Card(
         modifier = Modifier
             .padding(8.dp)
@@ -135,10 +147,9 @@ fun PlayerItem(
                 width = if (player.hasPotato) 4.dp else 1.dp,
                 color = if (player.hasPotato) Color.Red else Color.Gray,
                 shape = MaterialTheme.shapes.medium
-            )
-            .background(blinkColor),
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = if (player.hasPotato) Color.Red.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
+            containerColor = if (player.hasPotato) Color.Red.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surface
         )
     ) {
         Box(
@@ -164,15 +175,24 @@ fun PlayerItem(
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
-                if (player.isRequesting) {
-                    Text(
-                        text = "¡QUIERE LA PAPA!",
-                        color = Color(0xFFE65100),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
             }
         }
+    }
+}
+
+private fun vibrate(context: Context) {
+    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+        vibratorManager.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        vibrator.vibrate(VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE))
+    } else {
+        @Suppress("DEPRECATION")
+        vibrator.vibrate(300)
     }
 }
