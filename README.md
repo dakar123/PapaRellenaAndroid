@@ -4,27 +4,27 @@
     <ul>
       <li>ui
         <ul>
-          <li>MenuScreen.kt</li>
-          <li>LobbyScreen.kt</li>
-          <li>GameScreen.kt</li>
+          <li>MenuScreen.java</li>
+          <li>LobbyScreen.java</li>
+          <li>GameScreen.java</li>
         </ul>
       </li>
       <li>network
         <ul>
-          <li>Server.kt</li>
-          <li>Client.kt</li>
+          <li>Server.java</li>
+          <li>Client.java</li>
         </ul>
       </li>
       <li>game
         <ul>
-          <li>GameManager.kt</li>
-          <li>Player.kt</li>
+          <li>GameManager.java</li>
+          <li>Player.java</li>
         </ul>
       </li>
       <li>utils
         <ul>
-          <li>SoundManager.kt</li>
-          <li>Timer.kt</li>
+          <li>SoundManager.java</li>
+          <li>Timer.java</li>
         </ul>
       </li>
     </ul>
