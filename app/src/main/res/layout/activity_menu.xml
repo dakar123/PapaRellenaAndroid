@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="32.dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="PAPA RELLENA"
+        android:textSize="40sp"
+        android:textStyle="bold"
+        android:textColor="@color/purple_500"
+        android:layout_marginBottom="64.dp"/>
+
+    <Button
+        android:id="@+id/btn_host"
+        android:layout_width="match_parent"
+        android:layout_height="60.dp"
+        android:text="CREAR PARTIDA (HOST)"
+        android:layout_marginBottom="16.dp"/>
+
+    <Button
+        android:id="@+id/btn_join"
+        android:layout_width="match_parent"
+        android:layout_height="60.dp"
+        android:text="UNIRSE A PARTIDA"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+
+</LinearLayout>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16.dp">
+
+    <TextView
+        android:id="@+id/tv_lobby_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="24.dp"
+        android:text="SALA DE ESPERA"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:textColor="@color/purple_700" />
+
+    <TextView
+        android:id="@+id/tv_players_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/tv_lobby_title"
+        android:layout_marginTop="32.dp"
+        android:text="Jugadores conectados:"
+        android:textSize="18sp" />
+
+    <ListView
+        android:id="@+id/lv_players"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/tv_players_label"
+        android:layout_above="@+id/btn_start_game"
+        android:layout_marginTop="8.dp"
+        android:layout_marginBottom="16.dp" />
+
+    <Button
+        android:id="@+id/btn_start_game"
+        android:layout_width="match_parent"
+        android:layout_height="56.dp"
+        android:layout_alignParentBottom="true"
+        android:text="EMPEZAR JUEGO"
+        android:layout_marginBottom="8.dp"/>
+
+</RelativeLayout>

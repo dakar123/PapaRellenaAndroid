@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/game_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/white">
+
+    <TextView
+        android:id="@+id/tv_game_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="32.dp"
+        android:text="¡TIENES LA PAPA!"
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+    <ImageView
+        android:id="@+id/iv_potato"
+        android:layout_width="200dp"
+        android:layout_height="200dp"
+        android:layout_centerInParent="true"
+        android:src="@drawable/ic_launcher_foreground" />
+
+    <TextView
+        android:id="@+id/tv_timer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/iv_potato"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="16.dp"
+        android:text="00:00"
+        android:textSize="48sp"
+        android:textColor="@android:color/black" />
+
+    <Button
+        android:id="@+id/btn_pass_potato"
+        android:layout_width="match_parent"
+        android:layout_height="64.dp"
+        android:layout_alignParentBottom="true"
+        android:layout_margin="32.dp"
+        android:text="¡PASAR PAPA!"
+        android:textSize="20sp" />
+
+    <FrameLayout
+        android:id="@+id/loss_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#CCFF0000"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="PERDISTE"
+            android:textColor="@android:color/white"
+            android:textSize="64sp"
+            android:textStyle="bold" />
+    </FrameLayout>
+
+</RelativeLayout>
