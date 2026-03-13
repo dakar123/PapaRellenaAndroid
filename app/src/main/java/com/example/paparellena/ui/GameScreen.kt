@@ -38,33 +38,31 @@ fun GameScreen(
     val currentPlayer = players.find { it.id == currentPlayerId }
     val hasPotato = currentPlayer?.hasPotato ?: false
     
-    // Vibrate when potato is received
     LaunchedEffect(hasPotato) {
         if (hasPotato) {
             vibrate(context)
         }
     }
 
-    val isUrgent = timeLeftSeconds in 1..5
+    // El tiempo de urgencia ahora es un misterio visual, se activa en los últimos 7 segundos
+    val isUrgent = timeLeftSeconds in 1..7
     val infiniteTransition = rememberInfiniteTransition(label = "flash")
     
-    // Background color animation for urgency
     val urgentColor by infiniteTransition.animateColor(
-        initialValue = Color.Red.copy(alpha = 0.4f),
-        targetValue = Color.Yellow.copy(alpha = 0.4f),
+        initialValue = Color.Red.copy(alpha = 0.5f),
+        targetValue = Color.Yellow.copy(alpha = 0.5f),
         animationSpec = infiniteRepeatable(
-            animation = tween(250, easing = LinearEasing),
+            animation = tween(200, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "urgentBg"
     )
 
-    // Background color animation for holding the potato
     val holdingColor by infiniteTransition.animateColor(
         initialValue = Color.Red.copy(alpha = 0.1f),
-        targetValue = Color.Red.copy(alpha = 0.6f),
+        targetValue = Color.Red.copy(alpha = 0.4f),
         animationSpec = infiniteRepeatable(
-            animation = tween(500, easing = LinearEasing),
+            animation = tween(400, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "holdingBg"
@@ -98,19 +96,14 @@ fun GameScreen(
                 }
             } else {
                 Text(
-                    text = if (hasPotato) "¡TIENES LA PAPA!" else "¡PÁSALO!",
+                    text = if (hasPotato) "¡TIENES LA PAPA!" else "¡ATENTO!",
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(vertical = 24.dp),
                     color = if (hasPotato || isUrgent) Color.Black else MaterialTheme.colorScheme.onBackground
                 )
 
-                Text(
-                    text = "Tiempo: $timeLeftSeconds s",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isUrgent) Color.Red else MaterialTheme.colorScheme.onBackground
-                )
+                // El temporizador numérico ha sido eliminado para mayor suspenso
 
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),

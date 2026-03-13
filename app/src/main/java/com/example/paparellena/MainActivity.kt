@@ -35,6 +35,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
 import java.util.*
+import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
     private lateinit var nsdHelper: NsdHelper
@@ -99,7 +100,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Interface for incoming messages to update UI state
             DisposableEffect(Unit) {
                 messageCallback = { msg ->
                     when (msg.type) {
@@ -109,6 +109,7 @@ class MainActivity : ComponentActivity() {
                         }
                         GameMessage.TYPE_START -> {
                             currentScreen = "game"
+                            isGameOver = false
                         }
                         GameMessage.TYPE_COUNTDOWN -> {
                             countdown = msg.content.toInt()
@@ -283,13 +284,14 @@ class MainActivity : ComponentActivity() {
                     for (i in masterPlayers.indices) {
                         masterPlayers[i] = masterPlayers[i].copy(hasPotato = masterPlayers[i].id == targetId)
                     }
+                    masterPlayers.shuffle()
                     broadcastPlayerList()
                 }
             }
         }
     }
 
-    private fun hostStartGame(totalTime: Int) {
+    private fun hostStartGame(selectedTimeSeconds: Int) {
         CoroutineScope(Dispatchers.Default).launch {
             server?.broadcast(GameMessage(GameMessage.TYPE_START, myId, ""))
             
@@ -309,7 +311,10 @@ class MainActivity : ComponentActivity() {
             }
             broadcastPlayerList()
 
-            var currentTimer = totalTime
+            // Random time between selectedTime - 15s and selectedTime + 5s (approximate)
+            val randomDuration = selectedTimeSeconds - Random.nextInt(0, 15)
+            var currentTimer = randomDuration
+
             while (currentTimer > 0) {
                 delay(1000)
                 currentTimer--
