@@ -3,7 +3,6 @@ package com.example.paparellena.ui;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
@@ -11,6 +10,8 @@ import com.example.paparellena.R;
 import com.example.paparellena.game.GameManager;
 import com.example.paparellena.game.Player;
 import com.google.android.material.button.MaterialButton;
+
+import java.util.Locale;
 
 public class GameScreen extends AppCompatActivity implements GameManager.GameEventListener {
     private TextView tvStatus;
@@ -26,8 +27,8 @@ public class GameScreen extends AppCompatActivity implements GameManager.GameEve
         setContentView(R.layout.activity_game);
 
         tvStatus = findViewById(R.id.tv_game_status);
-        tvTimer = new TextView(this); // Temporal, deberías tenerlo en el XML
-        btnPassPotato = findViewById(R.id.btn_request_potato); // Usando el ID existente para pasar la papa
+        tvTimer = findViewById(R.id.tv_timer); // Asegúrate de que este ID exista en activity_game.xml
+        btnPassPotato = findViewById(R.id.btn_request_potato);
 
         gameManager = GameManager.getInstance();
         gameManager.setListener(this);
@@ -35,7 +36,7 @@ public class GameScreen extends AppCompatActivity implements GameManager.GameEve
         btnPassPotato.setOnClickListener(v -> {
             if (gameManager.canPassPotato()) {
                 gameManager.passPotatoToNext();
-            } else if (gameManager.getLocalPlayer().isHasPotato()) {
+            } else if (gameManager.getLocalPlayer() != null && gameManager.getLocalPlayer().isHasPotato()) {
                 Toast.makeText(this, "¡Espera! Debes tener la papa al menos 2.5s", Toast.LENGTH_SHORT).show();
             }
         });
@@ -55,7 +56,10 @@ public class GameScreen extends AppCompatActivity implements GameManager.GameEve
     }
 
     private void updateUI() {
-        if (gameManager.getLocalPlayer().isHasPotato()) {
+        Player localPlayer = gameManager.getLocalPlayer();
+        if (localPlayer == null) return;
+        
+        if (localPlayer.isHasPotato()) {
             long remaining = gameManager.getRemainingTurnTime();
             tvStatus.setText("¡TIENES LA PAPA!");
             tvStatus.setTextColor(getResources().getColor(android.R.color.holo_red_dark));
@@ -68,9 +72,9 @@ public class GameScreen extends AppCompatActivity implements GameManager.GameEve
                 btnPassPotato.setEnabled(false);
             }
             
-            // Mostrar cuenta regresiva de 5s
             double seconds = remaining / 1000.0;
-            tvStatus.append(String.format("\nExplosión en: %.1fs", seconds));
+            String statusText = String.format(Locale.getDefault(), "¡TIENES LA PAPA!\nExplosión en: %.1fs", seconds);
+            tvStatus.setText(statusText);
         } else {
             tvStatus.setText("Esperando la papa...");
             tvStatus.setTextColor(getResources().getColor(android.R.color.black));
@@ -106,7 +110,8 @@ public class GameScreen extends AppCompatActivity implements GameManager.GameEve
     @Override
     public void onGameOver(String loserId) {
         runOnUiThread(() -> {
-            String message = loserId.equals(gameManager.getLocalPlayer().getId()) ? "¡BOOM! PERDISTE" : "¡Alguien explotó!";
+            Player localPlayer = gameManager.getLocalPlayer();
+            String message = (localPlayer != null && loserId.equals(localPlayer.getId())) ? "¡BOOM! PERDISTE" : "¡Alguien explotó!";
             tvStatus.setText(message);
             btnPassPotato.setEnabled(false);
             Toast.makeText(this, "Fin del juego: " + loserId, Toast.LENGTH_LONG).show();
@@ -114,11 +119,23 @@ public class GameScreen extends AppCompatActivity implements GameManager.GameEve
     }
 
     @Override
-    public void onTick(int seconds) {}
+    public void onTick(int seconds) {
+        runOnUiThread(() -> {
+            if (tvTimer != null) {
+                tvTimer.setText(String.format(Locale.getDefault(), "Tiempo: %ds", seconds));
+            }
+        });
+    }
+
+    @Override
+    public void onHoldTimeUpdate(long elapsedMs) {
+        runOnUiThread(this::updateUI);
+    }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         updateHandler.removeCallbacks(updateRunnable);
+        gameManager.setListener(null);
     }
 }
