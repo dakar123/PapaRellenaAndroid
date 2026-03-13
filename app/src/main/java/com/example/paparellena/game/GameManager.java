@@ -22,6 +22,13 @@ public class GameManager {
     private Handler hostTimerHandler = new Handler(Looper.getMainLooper());
     private Runnable timerRunnable;
 
+    // Nuevas variables para la lógica de la papa
+    private long lastPotatoReceivedTime;
+    private Handler turnTimerHandler = new Handler(Looper.getMainLooper());
+    private Runnable turnTimerRunnable;
+    private static final long MIN_HOLD_TIME = 2500; // 2.5s
+    private static final long MAX_HOLD_TIME = 5000; // 5s
+
     public interface GameEventListener {
         void onPlayerJoined(Player player);
         void onGameStarted(String starterId);
@@ -103,16 +110,15 @@ public class GameManager {
                 isGameRunning = true;
                 if (listener != null) listener.onGameStarted(msg.getContent());
                 if (msg.getContent().equals(localPlayer.getId())) {
-                    localPlayer.setHasPotato(true);
-                    if (listener != null) listener.onPotatoReceived();
+                    onReceivePotato();
                 }
                 break;
             case GameMessage.TYPE_PASS_POTATO:
                 if (msg.getContent().equals(localPlayer.getId())) {
-                    localPlayer.setHasPotato(true);
-                    if (listener != null) listener.onPotatoReceived();
+                    onReceivePotato();
                 } else {
                     localPlayer.setHasPotato(false);
+                    stopTurnTimer();
                     if (listener != null) listener.onPotatoPassed();
                 }
                 break;
@@ -123,8 +129,36 @@ public class GameManager {
             case GameMessage.TYPE_GAME_OVER:
                 isGameRunning = false;
                 stopTimer();
+                stopTurnTimer();
                 if (listener != null) listener.onGameOver(msg.getContent());
                 break;
+        }
+    }
+
+    private void onReceivePotato() {
+        localPlayer.setHasPotato(true);
+        lastPotatoReceivedTime = System.currentTimeMillis();
+        startTurnTimer();
+        if (listener != null) listener.onPotatoReceived();
+    }
+
+    private void startTurnTimer() {
+        stopTurnTimer();
+        turnTimerRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (localPlayer.isHasPotato() && isGameRunning) {
+                    // Explota automáticamente si pasa de 5s
+                    broadcast(new GameMessage(GameMessage.TYPE_GAME_OVER, localPlayer.getId(), localPlayer.getId()));
+                }
+            }
+        };
+        turnTimerHandler.postDelayed(turnTimerRunnable, MAX_HOLD_TIME);
+    }
+
+    private void stopTurnTimer() {
+        if (turnTimerRunnable != null) {
+            turnTimerHandler.removeCallbacks(turnTimerRunnable);
         }
     }
 
@@ -150,23 +184,26 @@ public class GameManager {
                     broadcast(new GameMessage(GameMessage.TYPE_TICK, localPlayer.getId(), String.valueOf(remainingTime)));
                     hostTimerHandler.postDelayed(this, 1000);
                 } else {
-                    String loserId = getPlayerWithPotatoId();
-                    broadcast(new GameMessage(GameMessage.TYPE_GAME_OVER, localPlayer.getId(), loserId));
+                    // El tiempo total se acabó, pero la lógica de 5s individuales sigue activa.
+                    // Podríamos forzar un perdedor aquí si el tiempo total es el que manda,
+                    // pero según el requerimiento, la explosión es por los 5s.
                 }
             }
         };
         hostTimerHandler.post(timerRunnable);
     }
 
-    private String getPlayerWithPotatoId() {
-        // En una implementación real, el Host debería trackear quién tiene la papa
-        // o los clientes deberían reportar. Para simplificar, asumimos que el último PASS_POTATO define al perdedor.
-        return "current_holder_id"; 
-    }
-
     public void passPotatoToNext() {
-        if (!localPlayer.isHasPotato()) return;
+        if (!localPlayer.isHasPotato() || !isGameRunning) return;
         
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastPotatoReceivedTime < MIN_HOLD_TIME) {
+            // No se puede pasar antes de 2.5s
+            return;
+        }
+
+        if (players.size() < 2) return;
+
         int myIdx = -1;
         for(int i=0; i<players.size(); i++) {
             if(players.get(i).getId().equals(localPlayer.getId())) {
@@ -175,7 +212,13 @@ public class GameManager {
             }
         }
         
-        int nextIdx = (myIdx + 1) % players.size();
+        // Seleccionar usuario de forma aleatoria (que no sea el actual)
+        Random random = new Random();
+        int nextIdx;
+        do {
+            nextIdx = random.nextInt(players.size());
+        } while (nextIdx == myIdx && players.size() > 1);
+        
         String nextPlayerId = players.get(nextIdx).getId();
         
         broadcast(new GameMessage(GameMessage.TYPE_PASS_POTATO, localPlayer.getId(), nextPlayerId));
@@ -197,4 +240,17 @@ public class GameManager {
     public Player getLocalPlayer() { return localPlayer; }
     public List<Player> getPlayers() { return players; }
     public boolean isHost() { return isHost; }
+    public boolean isGameRunning() { return isGameRunning; }
+    
+    public long getRemainingTurnTime() {
+        if (!localPlayer.isHasPotato()) return 0;
+        long elapsed = System.currentTimeMillis() - lastPotatoReceivedTime;
+        return Math.max(0, MAX_HOLD_TIME - elapsed);
+    }
+    
+    public boolean canPassPotato() {
+        if (!localPlayer.isHasPotato()) return false;
+        long elapsed = System.currentTimeMillis() - lastPotatoReceivedTime;
+        return elapsed >= MIN_HOLD_TIME;
+    }
 }
