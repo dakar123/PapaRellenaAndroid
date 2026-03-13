@@ -16,7 +16,7 @@ public class SoundManager {
     public void playBackgroundMusic() {
         try {
             if (backgroundMusic == null) {
-                backgroundMusic = MediaPlayer.create(context, R.raw.sarabi_toto_africa);
+                backgroundMusic = MediaPlayer.create(context, R.raw.musicafondo);
                 if (backgroundMusic != null) {
                     backgroundMusic.setLooping(true);
                     backgroundMusic.setVolume(0.3f, 0.3f);
@@ -50,7 +50,7 @@ public class SoundManager {
             if (gameOverPlayer != null) {
                 gameOverPlayer.release();
             }
-            gameOverPlayer = MediaPlayer.create(context, R.raw.alphix_game_over_417465);
+            gameOverPlayer = MediaPlayer.create(context, R.raw.gameover);
             if (gameOverPlayer != null) {
                 gameOverPlayer.start();
             }
