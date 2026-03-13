@@ -8,28 +8,32 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class Server {
     private static final int PORT = 8888;
     private ServerSocket serverSocket;
     private boolean isRunning;
-    private List<ClientHandler> clients = new ArrayList<>();
-    private Gson gson = new Gson();
+    private final List<ClientHandler> clients = Collections.synchronizedList(new ArrayList<>());
+    private final Gson gson = new Gson();
+    private final ExecutorService executor = Executors.newCachedThreadPool();
 
     public interface ServerCallback {
         void onMessageReceived(GameMessage message);
         void onClientConnected(String ip);
     }
 
-    private ServerCallback callback;
+    private final ServerCallback callback;
 
     public Server(ServerCallback callback) {
         this.callback = callback;
     }
 
     public void start() {
-        new Thread(() -> {
+        executor.execute(() -> {
             try {
                 serverSocket = new ServerSocket(PORT);
                 isRunning = true;
@@ -37,13 +41,15 @@ public class Server {
                     Socket socket = serverSocket.accept();
                     ClientHandler handler = new ClientHandler(socket);
                     clients.add(handler);
-                    new Thread(handler).start();
-                    if (callback != null) callback.onClientConnected(socket.getInetAddress().getHostAddress());
+                    executor.execute(handler);
+                    if (callback != null) {
+                        callback.onClientConnected(socket.getInetAddress().getHostAddress());
+                    }
                 }
             } catch (IOException e) {
                 if (isRunning) e.printStackTrace();
             }
-        }).start();
+        });
     }
 
     public void stop() {
@@ -53,13 +59,17 @@ public class Server {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        for (ClientHandler client : clients) {
-            client.stop();
+        synchronized (clients) {
+            for (ClientHandler client : clients) {
+                client.stop();
+            }
+            clients.clear();
         }
-        clients.clear();
+        executor.shutdownNow();
     }
 
     public void broadcast(GameMessage message) {
+        if (message == null) return;
         String json = gson.toJson(message);
         synchronized (clients) {
             for (ClientHandler client : clients) {
@@ -69,7 +79,7 @@ public class Server {
     }
 
     private class ClientHandler implements Runnable {
-        private Socket socket;
+        private final Socket socket;
         private PrintWriter out;
         private BufferedReader in;
         private boolean active = true;
@@ -85,9 +95,14 @@ public class Server {
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 String line;
                 while (active && (line = in.readLine()) != null) {
-                    GameMessage msg = gson.fromJson(line, GameMessage.class);
-                    if (callback != null) callback.onMessageReceived(msg);
-                    broadcast(msg); // Forward to everyone
+                    try {
+                        GameMessage msg = gson.fromJson(line, GameMessage.class);
+                        if (msg != null && callback != null) {
+                            callback.onMessageReceived(msg);
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 }
             } catch (IOException e) {
                 if (active) e.printStackTrace();
@@ -97,11 +112,21 @@ public class Server {
         }
 
         public void sendMessage(String json) {
-            if (out != null) out.println(json);
+            if (active && out != null) {
+                executor.execute(() -> {
+                    synchronized (this) {
+                        if (out != null) {
+                            out.println(json);
+                        }
+                    }
+                });
+            }
         }
 
         public void stop() {
+            if (!active) return;
             active = false;
+            clients.remove(this);
             try {
                 if (socket != null) socket.close();
             } catch (IOException e) {

@@ -42,7 +42,7 @@ fun GameScreen(
     val hasPotato = currentPlayer?.hasPotato ?: false
     
     // UI Constraints from logic
-    val minHoldTime = 2500L
+    val minHoldTime = 2000L
     val maxHoldTime = 5000L
     val canPass = hasPotato && holdTimeMs >= minHoldTime
     val isBurning = hasPotato && holdTimeMs > 3500L
@@ -56,8 +56,8 @@ fun GameScreen(
     val infiniteTransition = rememberInfiniteTransition(label = "gameEffects")
     
     val burningColor by infiniteTransition.animateColor(
-        initialValue = Color(0xFFE74C3C), // hot_red
-        targetValue = Color(0xFFF39C12), // orange
+        initialValue = Color(0xFFE74C3C),
+        targetValue = Color(0xFFF39C12),
         animationSpec = infiniteRepeatable(
             animation = tween(150, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
@@ -67,8 +67,8 @@ fun GameScreen(
 
     val backgroundColor = when {
         isBurning -> burningColor
-        hasPotato -> Color(0xFFD2B48C).copy(alpha = 0.3f) // potato_light
-        else -> Color(0xFFFDF5E6) // OldLace / Cream
+        hasPotato -> Color(0xFFD2B48C).copy(alpha = 0.3f)
+        else -> Color(0xFFFDF5E6)
     }
 
     Box(
@@ -82,63 +82,54 @@ fun GameScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (countdown > 0) {
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Text(
+                text = if (hasPotato) "¡TIENES LA PAPA!" else "¡PREPÁRATE!",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (isBurning) Color.Red else Color(0xFF5D4037),
+                modifier = Modifier.padding(top = 32.dp, bottom = 8.dp)
+            )
+
+            // NO SE MUESTRA EL TIEMPO RESTANTE DE LA PARTIDA (timeLeftSeconds)
+            // Solo se muestra el indicador de carga interna de la papa si se tiene
+            if (hasPotato) {
+                val progressValue = (holdTimeMs.toFloat() / maxHoldTime).coerceIn(0f, 1f)
+                val progressColor = if (holdTimeMs < minHoldTime) Color.Gray else if (isBurning) Color.Red else Color(0xFFF4D03F)
+                
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = countdown.toString(),
-                        fontSize = 120.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF8B4513) // potato_brown
+                        text = if (holdTimeMs < minHoldTime) "¡No la sueltes!" else "¡PÁSALA YA!",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = progressColor
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { progressValue },
+                        modifier = Modifier
+                            .fillMaxWidth(0.8f)
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(6.dp)),
+                        color = progressColor,
+                        trackColor = Color.LightGray
                     )
                 }
-            } else {
-                Text(
-                    text = if (hasPotato) "¡TIENES LA PAPA!" else "¡PREPÁRATE!",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = if (isBurning) Color.Red else Color(0xFF5D4037),
-                    modifier = Modifier.padding(top = 32.dp, bottom = 8.dp)
-                )
+            }
 
-                if (hasPotato) {
-                    val progressValue = (holdTimeMs.toFloat() / maxHoldTime).coerceIn(0f, 1f)
-                    val progressColor = if (holdTimeMs < minHoldTime) Color.Gray else if (isBurning) Color.Red else Color(0xFFF4D03F)
-                    
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = if (holdTimeMs < minHoldTime) "¡No la sueltes! (${(minHoldTime - holdTimeMs)/1000f}s)" else "¡PÁSALA YA!",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = progressColor
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LinearProgressIndicator(
-                            progress = { progressValue },
-                            modifier = Modifier
-                                .fillMaxWidth(0.8f)
-                                .height(12.dp)
-                                .clip(RoundedCornerShape(6.dp)),
-                            color = progressColor,
-                            trackColor = Color.LightGray
-                        )
-                    }
-                }
+            Spacer(modifier = Modifier.height(24.dp))
 
-                Spacer(modifier = Modifier.height(24.dp))
-
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    items(players) { player ->
-                        PlayerItem(
-                            player = player,
-                            isSelf = player.id == currentPlayerId,
-                            canReceive = canPass && player.id != currentPlayerId,
-                            onClick = { onPassPotato(player.id) }
-                        )
-                    }
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(8.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                items(players) { player ->
+                    PlayerItem(
+                        player = player,
+                        isSelf = player.id == currentPlayerId,
+                        canReceive = canPass && player.id != currentPlayerId,
+                        onClick = { onPassPotato(player.id) }
+                    )
                 }
             }
         }

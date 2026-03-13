@@ -16,6 +16,7 @@ public class GameManager {
     private boolean isHost;
     private boolean isGameRunning;
     private int remainingTime;
+    private int initialTime = 30; // Default time selected by user
     
     private Server server;
     private Client client;
@@ -24,7 +25,7 @@ public class GameManager {
 
     // Logic for potato holding constraints
     private long potatoReceivedTime = 0;
-    private static final long MIN_HOLD_TIME_MS = 2500;
+    private static final long MIN_HOLD_TIME_MS = 2000;
     private static final long MAX_HOLD_TIME_MS = 5000;
     private Handler burningHandler = new Handler(Looper.getMainLooper());
     private Runnable burningRunnable;
@@ -54,9 +55,13 @@ public class GameManager {
         this.listener = listener;
     }
 
+    public void setInitialTime(int seconds) {
+        this.initialTime = seconds;
+    }
+
     public void initAsHost(String name, String ip) {
         this.isHost = true;
-        this.localPlayer = new Player(ip, name, ip);
+        this.localPlayer = new Player(ip, name);
         players.clear();
         players.add(localPlayer);
         
@@ -76,7 +81,7 @@ public class GameManager {
 
     public void initAsClient(String name, String myIp, String serverIp) {
         this.isHost = (serverIp.equals("localhost") || serverIp.equals(myIp));
-        this.localPlayer = new Player(myIp, name, myIp);
+        this.localPlayer = new Player(myIp, name);
         
         client = new Client(serverIp, 8888, new Client.ClientCallback() {
             @Override
@@ -98,10 +103,15 @@ public class GameManager {
     public void handleMessage(GameMessage msg) {
         switch (msg.getType()) {
             case GameMessage.TYPE_JOIN:
-                Player newPlayer = new Player(msg.getSenderId(), msg.getContent(), msg.getSenderId());
+                Player newPlayer = new Player(msg.getSenderId(), msg.getContent());
                 if (!players.contains(newPlayer)) {
                     players.add(newPlayer);
                     if (listener != null) listener.onPlayerJoined(newPlayer);
+                }
+                if (isHost) {
+                   for(Player p : players) {
+                       broadcast(new GameMessage(GameMessage.TYPE_JOIN, p.getId(), p.getName()));
+                   }
                 }
                 break;
             case GameMessage.TYPE_START:
@@ -117,7 +127,6 @@ public class GameManager {
                 } else {
                     onReleasePotato();
                 }
-                // Actualizar visualmente quién tiene la papa
                 for (Player p : players) {
                     p.setHasPotato(p.getId().equals(msg.getContent()));
                 }
@@ -158,7 +167,6 @@ public class GameManager {
                 if (listener != null) listener.onHoldTimeUpdate(elapsed);
 
                 if (elapsed >= MAX_HOLD_TIME_MS) {
-                    // SE QUEMÓ
                     broadcast(new GameMessage(GameMessage.TYPE_GAME_OVER, localPlayer.getId(), localPlayer.getId()));
                 } else {
                     burningHandler.postDelayed(this, 100);
@@ -178,7 +186,12 @@ public class GameManager {
         if (!isHost || players.size() < 2) return;
         
         isGameRunning = true;
-        remainingTime = new Random().nextInt(20) + 15; // 15 a 35 segundos
+        
+        // Randomized duration: between (initialTime - 10) and initialTime
+        // If initialTime is less than 10, random between 1 and initialTime
+        int maxReduction = Math.min(10, initialTime - 1);
+        int reduction = (maxReduction > 0) ? new Random().nextInt(maxReduction + 1) : 0;
+        remainingTime = initialTime - reduction;
         
         int starterIdx = new Random().nextInt(players.size());
         String starterId = players.get(starterIdx).getId();
@@ -193,6 +206,8 @@ public class GameManager {
             public void run() {
                 if (remainingTime > 0 && isGameRunning) {
                     remainingTime--;
+                    // Still broadcast tick for internal logic if needed, 
+                    // but UI will be hidden.
                     broadcast(new GameMessage(GameMessage.TYPE_TICK, localPlayer.getId(), String.valueOf(remainingTime)));
                     hostTimerHandler.postDelayed(this, 1000);
                 } else if (isGameRunning) {
@@ -250,4 +265,12 @@ public class GameManager {
     public Player getLocalPlayer() { return localPlayer; }
     public List<Player> getPlayers() { return players; }
     public boolean isHost() { return isHost; }
+    public void reset() {
+        isGameRunning = false;
+        stopTimer();
+        stopBurningCheck();
+        players.clear();
+        if (server != null) server.stop();
+        if (client != null) client.disconnect();
+    }
 }
