@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -44,14 +45,33 @@ fun MenuScreenContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        // Icono de la papa con cara
         Box(
             modifier = Modifier
                 .size(120.dp)
-                .clip(RoundedCornerShape(40.dp))
+                .clip(RoundedCornerShape(45.dp))
                 .background(potatoBrown),
             contentAlignment = Alignment.Center
         ) {
-            Text("🥔", fontSize = 64.sp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    // Ojos
+                    Box(modifier = Modifier.size(18.dp).background(Color.White, CircleShape), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.size(10.dp).background(Color.Black, CircleShape))
+                    }
+                    Box(modifier = Modifier.size(18.dp).background(Color.White, CircleShape), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.size(10.dp).background(Color.Black, CircleShape))
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                // Boca
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(15.dp)
+                        .background(Color(0xFF5D4037), shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))

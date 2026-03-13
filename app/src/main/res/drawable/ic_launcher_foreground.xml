@@ -7,14 +7,26 @@
     <path
         android:fillColor="#8B4513"
         android:pathData="M54,20 C35,20 20,35 20,54 C20,73 35,88 54,88 C73,88 88,73 88,54 C88,35 73,20 54,20 Z" />
-    <!-- Potato Shape variation to make it less circular -->
     <path
         android:fillColor="#A0522D"
         android:pathData="M54,22 C38,22 24,36 24,54 C24,72 38,86 54,86 C70,86 84,72 84,54 C84,36 70,22 54,22 Z" />
-    <!-- Potato Eyes/Dots -->
+
+    <!-- Potato Spots -->
     <path
         android:fillColor="#5D4037"
-        android:pathData="M40,40 L42,42 M68,45 L70,47 M50,65 L52,67 M35,60 L37,62 M75,60 L77,62"
-        android:strokeWidth="2"
+        android:pathData="M35,60 L37,62 M75,60 L77,62 M50,75 L52,77"
+        android:strokeWidth="1.5"
         android:strokeLineCap="round" />
+
+    <!-- Eyes (Simple black dots) -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M42,42 a4,4 0 1,1 0,8 a4,4 0 1,1 0,-8 M66,42 a4,4 0 1,1 0,8 a4,4 0 1,1 0,-8" />
+
+    <!-- Mouth (Simple smile like ")") -->
+    <path
+        android:strokeColor="#5D4037"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M45,65 Q54,75 63,65" />
 </vector>

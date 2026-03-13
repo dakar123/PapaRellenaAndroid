@@ -3,6 +3,10 @@ package com.example.paparellena
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.os.*
@@ -33,14 +37,23 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
 import java.util.*
+import kotlin.math.sqrt
 import kotlin.random.Random
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var nsdHelper: NsdHelper
     private var server: Server? = null
     private var client: Client? = null
     private lateinit var soundManager: SoundManager
     
+    // Sensor management
+    private lateinit var sensorManager: SensorManager
+    private var accelerometer: Sensor? = null
+    private var lastShakeTime: Long = 0
+    private var isPlayingState = false
+    private var canPassLocallyState = false
+    private var currentPlayersListState = listOf<Player>()
+
     private val myId = UUID.randomUUID().toString()
     private val gson = Gson()
     
@@ -52,6 +65,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         nsdHelper = NsdHelper(this)
         soundManager = SoundManager(this)
+        
+        // Initialize sensors
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
         setContent {
             val context = LocalContext.current
@@ -68,7 +85,11 @@ class MainActivity : ComponentActivity() {
 
             val hasPotato = players.find { it.id == myId }?.hasPotato == true
             
-            // Track hold time locally for UI and min-hold enforcement
+            // Actualizar variables de clase para que el sensor las vea
+            isPlayingState = currentScreen == "game" && !isGameOver && countdown == 0
+            canPassLocallyState = hasPotato && holdTimeMs >= 2500L
+            currentPlayersListState = players
+
             LaunchedEffect(hasPotato) {
                 if (hasPotato) {
                     val start = System.currentTimeMillis()
@@ -197,7 +218,6 @@ class MainActivity : ComponentActivity() {
                         countdown = countdown,
                         holdTimeMs = holdTimeMs,
                         onPassPotato = { targetId: String ->
-                            // Enforce 2.5s minimum hold time before passing
                             if (!isGameOver && countdown == 0 && holdTimeMs >= 2500L) {
                                 val msg = GameMessage(GameMessage.TYPE_PASS_POTATO, myId, targetId)
                                 client?.sendMessage(msg)
@@ -231,6 +251,56 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        accelerometer?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        sensorManager.unregisterListener(this)
+    }
+
+    override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+            val x = event.values[0]
+            val y = event.values[1]
+            val z = event.values[2]
+            
+            // Calculamos la aceleración total (magnitud del vector)
+            val acceleration = sqrt(x * x + y * y + z * z)
+            
+            // Umbral de sacudida muy sensible: > 13 m/s^2 (la gravedad es ~9.8)
+            // Esto detectará movimientos más leves.
+            if (acceleration > 13f) {
+                val now = System.currentTimeMillis()
+                if (now - lastShakeTime > 800) { // Reducido un poco el bloqueo entre sacudidas
+                    lastShakeTime = now
+                    onDeviceShake()
+                }
+            }
+        }
+    }
+
+    private fun onDeviceShake() {
+        // Verificar estados en el hilo principal
+        runOnUiThread {
+            if (isPlayingState && canPassLocallyState) {
+                val otherPlayers = currentPlayersListState.filter { it.id != myId }
+                if (otherPlayers.isNotEmpty()) {
+                    val randomTarget = otherPlayers[Random.nextInt(otherPlayers.size)]
+                    val msg = GameMessage(GameMessage.TYPE_PASS_POTATO, myId, randomTarget.id)
+                    client?.sendMessage(msg)
+                    Toast.makeText(this, "¡Sacudida! Papa pasada a ${randomTarget.name}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private var messageCallback: ((GameMessage) -> Unit)? = null
 
@@ -321,7 +391,7 @@ class MainActivity : ComponentActivity() {
                     broadcastPlayerList()
                 }
                 server?.broadcast(msg)
-                startHostPotatoTimer(targetId) // Host times the 5s limit for the receiver
+                startHostPotatoTimer(targetId)
             }
         }
     }
@@ -329,7 +399,7 @@ class MainActivity : ComponentActivity() {
     private fun startHostPotatoTimer(playerId: String) {
         potatoTimerJob?.cancel()
         potatoTimerJob = CoroutineScope(Dispatchers.Default).launch {
-            delay(5000L) // 5 seconds maximum hold time
+            delay(5000L)
             val loser = masterPlayers.find { it.id == playerId }?.name ?: "Alguien"
             server?.broadcast(GameMessage(GameMessage.TYPE_GAME_OVER, "server", "Host", loser))
         }
@@ -351,7 +421,6 @@ class MainActivity : ComponentActivity() {
             }
             server?.broadcast(GameMessage(GameMessage.TYPE_COUNTDOWN, "server", "Host", "0"))
             
-            // Assign potato to a random player
             var starterId = ""
             synchronized(masterPlayers) {
                 val randomIndex = Random.nextInt(masterPlayers.size)
