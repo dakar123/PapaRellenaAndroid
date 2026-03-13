@@ -1,62 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/game_layout"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root_game_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white">
+    android:background="#FFFFFF">
 
-    <TextView
-        android:id="@+id/tv_game_status"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_centerHorizontal="true"
-        android:layout_marginTop="32.dp"
-        android:text="¡TIENES LA PAPA!"
-        android:textSize="24sp"
-        android:textStyle="bold" />
-
-    <ImageView
-        android:id="@+id/iv_potato"
-        android:layout_width="200dp"
-        android:layout_height="200dp"
-        android:layout_centerInParent="true"
-        android:src="@drawable/ic_launcher_foreground" />
-
-    <TextView
-        android:id="@+id/tv_timer"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/iv_potato"
-        android:layout_centerHorizontal="true"
-        android:layout_marginTop="16.dp"
-        android:text="00:00"
-        android:textSize="48sp"
-        android:textColor="@android:color/black" />
-
-    <Button
-        android:id="@+id/btn_pass_potato"
-        android:layout_width="match_parent"
-        android:layout_height="64.dp"
-        android:layout_alignParentBottom="true"
-        android:layout_margin="32.dp"
-        android:text="¡PASAR PAPA!"
-        android:textSize="20sp" />
-
-    <FrameLayout
-        android:id="@+id/loss_overlay"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#CCFF0000"
-        android:visibility="gone">
+        android:orientation="vertical"
+        android:padding="16dp">
 
         <TextView
+            android:id="@+id/tv_game_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="PERDISTE"
-            android:textColor="@android:color/white"
-            android:textSize="64sp"
-            android:textStyle="bold" />
-    </FrameLayout>
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp"
+            android:text="¡PAPA CALIENTE!"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="#D32F2F"/>
 
-</RelativeLayout>
+        <!-- Grid of players -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_players"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+            app:spanCount="2"
+            android:clipToPadding="false"
+            android:padding="8dp"/>
+
+        <!-- Request button, visible when not having the potato -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_request_potato"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:text="¡SOLICITAR PAPA!"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            app:backgroundTint="#FF9800"
+            android:textColor="@android:color/white"
+            android:layout_margin="16dp"
+            app:cornerRadius="16dp"
+            android:visibility="visible"
+            app:elevation="8dp"/>
+
+    </LinearLayout>
+
+    <!-- Red flash overlay for final 10 seconds -->
+    <View
+        android:id="@+id/view_urgent_flash"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#88FF0000"
+        android:visibility="gone" />
+
+</FrameLayout>
