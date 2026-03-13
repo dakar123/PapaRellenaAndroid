@@ -1,23 +1,35 @@
 <h1>ESTRURTURA</h1>
-app
- ├── ui
- │    ├── MenuScreen
- │    ├── LobbyScreen
- │    ├── GameScreen
- │
- ├── network
- │    ├── Server
- │    ├── Client
- │
- ├── game
- │    ├── GameManager
- │    ├── Player
- │
- ├── utils
- │    ├── SoundManager
- │    ├── Timer
-
-
+<ul>
+  <li>app
+    <ul>
+      <li>ui
+        <ul>
+          <li>MenuScreen.kt</li>
+          <li>LobbyScreen.kt</li>
+          <li>GameScreen.kt</li>
+        </ul>
+      </li>
+      <li>network
+        <ul>
+          <li>Server.kt</li>
+          <li>Client.kt</li>
+        </ul>
+      </li>
+      <li>game
+        <ul>
+          <li>GameManager.kt</li>
+          <li>Player.kt</li>
+        </ul>
+      </li>
+      <li>utils
+        <ul>
+          <li>SoundManager.kt</li>
+          <li>Timer.kt</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
 2
 Interfaz gráfica moderna
 
