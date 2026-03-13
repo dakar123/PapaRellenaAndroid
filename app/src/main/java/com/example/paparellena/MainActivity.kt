@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
     
     private val masterPlayers = mutableListOf<Player>()
     private var isHost = false
+    private var potatoTimerJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,6 +67,8 @@ class MainActivity : ComponentActivity() {
             var holdTimeMs by remember { mutableLongStateOf(0L) }
 
             val hasPotato = players.find { it.id == myId }?.hasPotato == true
+            
+            // Track hold time locally for UI and min-hold enforcement
             LaunchedEffect(hasPotato) {
                 if (hasPotato) {
                     val start = System.currentTimeMillis()
@@ -114,7 +117,7 @@ class MainActivity : ComponentActivity() {
             }
 
             DisposableEffect(Unit) {
-                messageCallback = { msg ->
+                val callback: (GameMessage) -> Unit = { msg ->
                     when (msg.type) {
                         GameMessage.TYPE_PLAYER_LIST -> {
                             val listType = object : TypeToken<List<Player>>() {}.type
@@ -142,6 +145,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+                messageCallback = callback
                 onDispose { 
                     messageCallback = null
                     soundManager.release()
@@ -193,9 +197,14 @@ class MainActivity : ComponentActivity() {
                         countdown = countdown,
                         holdTimeMs = holdTimeMs,
                         onPassPotato = { targetId: String ->
-                            if (!isGameOver && countdown == 0) {
+                            // Enforce 2.5s minimum hold time before passing
+                            if (!isGameOver && countdown == 0 && holdTimeMs >= 2500L) {
                                 val msg = GameMessage(GameMessage.TYPE_PASS_POTATO, myId, targetId)
                                 client?.sendMessage(msg)
+                            } else if (holdTimeMs < 2500L) {
+                                runOnUiThread {
+                                    Toast.makeText(context, "¡Espera 2.5s antes de pasar!", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
                     )
@@ -247,6 +256,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun resetGame() {
+        potatoTimerJob?.cancel()
         server?.stop()
         server = null
         client?.disconnect()
@@ -310,8 +320,18 @@ class MainActivity : ComponentActivity() {
                     }
                     broadcastPlayerList()
                 }
-                server?.broadcast(msg) // Re-broadcast for sounds
+                server?.broadcast(msg)
+                startHostPotatoTimer(targetId) // Host times the 5s limit for the receiver
             }
+        }
+    }
+
+    private fun startHostPotatoTimer(playerId: String) {
+        potatoTimerJob?.cancel()
+        potatoTimerJob = CoroutineScope(Dispatchers.Default).launch {
+            delay(5000L) // 5 seconds maximum hold time
+            val loser = masterPlayers.find { it.id == playerId }?.name ?: "Alguien"
+            server?.broadcast(GameMessage(GameMessage.TYPE_GAME_OVER, "server", "Host", loser))
         }
     }
 
@@ -332,13 +352,16 @@ class MainActivity : ComponentActivity() {
             server?.broadcast(GameMessage(GameMessage.TYPE_COUNTDOWN, "server", "Host", "0"))
             
             // Assign potato to a random player
+            var starterId = ""
             synchronized(masterPlayers) {
                 val randomIndex = Random.nextInt(masterPlayers.size)
+                starterId = masterPlayers[randomIndex].id
                 for (i in masterPlayers.indices) {
                     masterPlayers[i] = masterPlayers[i].copy(hasPotato = i == randomIndex)
                 }
                 broadcastPlayerList()
             }
+            startHostPotatoTimer(starterId)
 
             val reduction = Random.nextInt(11)
             var currentT = maxTime - reduction

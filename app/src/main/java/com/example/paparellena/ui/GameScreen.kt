@@ -41,11 +41,14 @@ fun GameScreen(
     val currentPlayer = players.find { it.id == currentPlayerId }
     val hasPotato = currentPlayer?.hasPotato ?: false
     
-    // UI Constraints from logic
-    val minHoldTime = 2000L
-    val maxHoldTime = 5000L
+    // Logic: 2.5s minimum hold time, 5s maximum hold time.
+    val minHoldTime = 2500L
     val canPass = hasPotato && holdTimeMs >= minHoldTime
     val isBurning = hasPotato && holdTimeMs > 3500L
+
+    // Move positions: Shuffle players whenever the potato changes owner or player list changes.
+    val potatoOwnerId = remember(players) { players.find { it.hasPotato }?.id }
+    val shuffledPlayers = remember(potatoOwnerId, players.size) { players.shuffled() }
 
     LaunchedEffect(hasPotato) {
         if (hasPotato) {
@@ -83,38 +86,15 @@ fun GameScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = if (hasPotato) "¡TIENES LA PAPA!" else "¡PREPÁRATE!",
+                text = if (hasPotato) "" else "¡PREPÁRATE!",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = if (isBurning) Color.Red else Color(0xFF5D4037),
                 modifier = Modifier.padding(top = 32.dp, bottom = 8.dp)
             )
 
-            // NO SE MUESTRA EL TIEMPO RESTANTE DE LA PARTIDA (timeLeftSeconds)
-            // Solo se muestra el indicador de carga interna de la papa si se tiene
-            if (hasPotato) {
-                val progressValue = (holdTimeMs.toFloat() / maxHoldTime).coerceIn(0f, 1f)
-                val progressColor = if (holdTimeMs < minHoldTime) Color.Gray else if (isBurning) Color.Red else Color(0xFFF4D03F)
-                
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = if (holdTimeMs < minHoldTime) "¡No la sueltes!" else "¡PÁSALA YA!",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = progressColor
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LinearProgressIndicator(
-                        progress = { progressValue },
-                        modifier = Modifier
-                            .fillMaxWidth(0.8f)
-                            .height(12.dp)
-                            .clip(RoundedCornerShape(6.dp)),
-                        color = progressColor,
-                        trackColor = Color.LightGray
-                    )
-                }
-            }
+            // The progress bar and "Pasala ya/La tienes" texts have been removed as requested.
+            // Background colors and potato icon provide the necessary feedback.
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -123,7 +103,7 @@ fun GameScreen(
                 contentPadding = PaddingValues(8.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                items(players) { player ->
+                items(shuffledPlayers) { player ->
                     PlayerItem(
                         player = player,
                         isSelf = player.id == currentPlayerId,
