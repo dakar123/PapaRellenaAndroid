@@ -2,10 +2,12 @@ package com.example.paparellena
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.os.*
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -33,6 +35,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
 import java.util.*
+import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
     private lateinit var nsdHelper: NsdHelper
@@ -45,11 +48,6 @@ class MainActivity : ComponentActivity() {
     
     private val masterPlayers = mutableListOf<Player>()
     private var isHost = false
-
-    // Logic for potato holding constraints
-    private var potatoReceivedTime = 0L
-    private val MIN_HOLD_TIME_MS = 2500L
-    private val MAX_HOLD_TIME_MS = 5000L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,8 +64,6 @@ class MainActivity : ComponentActivity() {
             var discoveredGames by remember { mutableStateOf(listOf<NsdServiceInfo>()) }
             var isGameOver by remember { mutableStateOf(false) }
             var gameResultText by remember { mutableStateOf("") }
-            
-            var holdTimeMs by remember { mutableLongStateOf(0L) }
 
             val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES)
@@ -104,26 +100,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Burning check effect
-            LaunchedEffect(players, isGameOver) {
-                val me = players.find { it.id == myId }
-                if (me?.hasPotato == true && !isGameOver) {
-                    potatoReceivedTime = System.currentTimeMillis()
-                    while (me.hasPotato && !isGameOver) {
-                        val elapsed = System.currentTimeMillis() - potatoReceivedTime
-                        holdTimeMs = elapsed
-                        if (elapsed >= MAX_HOLD_TIME_MS) {
-                            val msg = GameMessage(GameMessage.TYPE_GAME_OVER, myId, username, "¡Te quemaste!")
-                            client?.sendMessage(msg)
-                            break
-                        }
-                        delay(50)
-                    }
-                } else {
-                    holdTimeMs = 0
-                }
-            }
-
             DisposableEffect(Unit) {
                 messageCallback = { msg ->
                     when (msg.type) {
@@ -143,8 +119,7 @@ class MainActivity : ComponentActivity() {
                         }
                         GameMessage.TYPE_GAME_OVER -> {
                             isGameOver = true
-                            gameResultText = if (msg.senderId == myId) "¡TE QUEMASTE!" else "¡Perdió ${msg.senderName}!"
-                            soundManager.playGameOverSound()
+                            gameResultText = "¡Perdió ${msg.content}!"
                         }
                     }
                 }
@@ -167,10 +142,7 @@ class MainActivity : ComponentActivity() {
                         checkWifiAndPermissions {
                             username = name
                             isHost = false
-                            if (service != null) startClient(service, name) else {
-                                // Fallback for testing
-                                startClientInternal("127.0.0.1", 8888, name)
-                            }
+                            startClient(service, name)
                             currentScreen = "lobby"
                         }
                     },
@@ -197,15 +169,10 @@ class MainActivity : ComponentActivity() {
                         currentPlayerId = myId,
                         timeLeftSeconds = timeLeft,
                         countdown = countdown,
-                        holdTimeMs = holdTimeMs,
                         onPassPotato = { targetId: String ->
                             if (!isGameOver && countdown == 0) {
-                                if (holdTimeMs >= MIN_HOLD_TIME_MS) {
-                                    val msg = GameMessage(GameMessage.TYPE_PASS_POTATO, myId, username, targetId)
-                                    client?.sendMessage(msg)
-                                } else {
-                                    Toast.makeText(context, "¡Espera! Aún no puedes pasarla", Toast.LENGTH_SHORT).show()
-                                }
+                                val msg = GameMessage(GameMessage.TYPE_PASS_POTATO, myId, username, targetId)
+                                client?.sendMessage(msg)
                             }
                         }
                     )
@@ -220,14 +187,11 @@ class MainActivity : ComponentActivity() {
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(gameResultText, fontSize = 24.sp, color = Color.White)
                                 Spacer(modifier = Modifier.height(32.dp))
-                                Button(
-                                    onClick = { 
-                                        resetGame()
-                                        currentScreen = "menu"
-                                        isGameOver = false
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B4513))
-                                ) { Text("Volver al Menú") }
+                                Button(onClick = { 
+                                    resetGame()
+                                    currentScreen = "menu"
+                                    isGameOver = false
+                                }) { Text("Volver al Menú") }
                             }
                         }
                     }
@@ -267,7 +231,6 @@ class MainActivity : ComponentActivity() {
         nsdHelper.unregisterService()
         masterPlayers.clear()
         isHost = false
-        soundManager.stopBackgroundMusic()
     }
 
     private fun startHost(name: String) {
@@ -280,8 +243,8 @@ class MainActivity : ComponentActivity() {
         })
         server?.start()
         nsdHelper.registerService(8888, name)
+        
         startClientInternal("127.0.0.1", 8888, name)
-        soundManager.playBackgroundMusic()
     }
 
     private fun startClient(service: NsdServiceInfo, name: String) {
@@ -321,11 +284,9 @@ class MainActivity : ComponentActivity() {
                     for (i in masterPlayers.indices) {
                         masterPlayers[i] = masterPlayers[i].copy(hasPotato = masterPlayers[i].id == targetId)
                     }
+                    masterPlayers.shuffle()
                     broadcastPlayerList()
                 }
-            }
-            GameMessage.TYPE_GAME_OVER -> {
-                server?.broadcast(msg)
             }
         }
     }
@@ -350,7 +311,10 @@ class MainActivity : ComponentActivity() {
             }
             broadcastPlayerList()
 
-            var currentTimer = selectedTimeSeconds
+            // Random time between selectedTime - 15s and selectedTime + 5s (approximate)
+            val randomDuration = selectedTimeSeconds - Random.nextInt(0, 15)
+            var currentTimer = randomDuration
+
             while (currentTimer > 0) {
                 delay(1000)
                 currentTimer--
@@ -358,7 +322,7 @@ class MainActivity : ComponentActivity() {
             }
             
             val loser = synchronized(masterPlayers) { masterPlayers.find { it.hasPotato } }
-            server?.broadcast(GameMessage(GameMessage.TYPE_GAME_OVER, myId, loser?.name ?: "Nadie", "¡Se acabó el tiempo!"))
+            server?.broadcast(GameMessage(GameMessage.TYPE_GAME_OVER, myId, loser?.name ?: "Nadie"))
         }
     }
 
