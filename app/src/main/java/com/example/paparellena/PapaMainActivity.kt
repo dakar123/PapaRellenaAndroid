@@ -1,79 +1,87 @@
 package com.example.paparellena
 
-import android.net.nsd.NsdServiceInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import com.example.paparellena.ui.GameScreen
 import com.example.paparellena.ui.MenuScreenContent
-import com.example.paparellena.ui.Player
+import com.example.paparellena.game.GameManager
+import com.example.paparellena.game.Player
 import kotlinx.coroutines.delay
 
 class PapaMainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        val gameManager = GameManager.getInstance()
+
         setContent {
             var currentScreen by remember { mutableStateOf("menu") }
-            var username by remember { mutableStateOf("") }
-            
-            // Discovery State
-            val discoveredGames by remember { mutableStateOf(listOf<NsdServiceInfo>()) }
+            var players by remember { mutableStateOf(gameManager.players) }
+            var timeLeft by remember { mutableIntStateOf(0) }
+            var holdTimeMs by remember { mutableLongStateOf(0L) }
+            val localPlayerId = gameManager.localPlayer?.id ?: "me"
 
-            // Game State
-            var players by remember { 
-                mutableStateOf(listOf<Player>()) 
+            DisposableEffect(Unit) {
+                gameManager.setListener(object : GameManager.GameEventListener {
+                    override fun onPlayerJoined(player: Player) {
+                        players = ArrayList(gameManager.players)
+                    }
+
+                    override fun onGameStarted(starterId: String) {
+                        players = ArrayList(gameManager.players)
+                        currentScreen = "game"
+                    }
+
+                    override fun onPotatoReceived() {
+                        players = ArrayList(gameManager.players)
+                    }
+
+                    override fun onPotatoPassed() {
+                        players = ArrayList(gameManager.players)
+                        holdTimeMs = 0
+                    }
+
+                    override fun onGameOver(loserId: String) {
+                        // Handle Game Over
+                    }
+
+                    override fun onTick(seconds: Int) {
+                        timeLeft = seconds
+                    }
+
+                    override fun onHoldTimeUpdate(elapsedMs: Long) {
+                        holdTimeMs = elapsedMs
+                    }
+                })
+                onDispose { gameManager.setListener(null) }
             }
-            var timeLeft by remember { mutableIntStateOf(60) }
-            val currentPlayerId = "me"
 
             if (currentScreen == "menu") {
                 MenuScreenContent(
-                    discoveredGames = discoveredGames,
-                    onHostGame = { name, time ->
-                        username = name
-                        timeLeft = time * 60
-                        players = listOf(
-                            Player("me", name, hasPotato = true),
-                            Player("2", "Jugador 2"),
-                            Player("3", "Jugador 3"),
-                            Player("4", "Jugador 4")
-                        )
+                    discoveredGames = emptyList(),
+                    onHostGame = { name, _ ->
+                        gameManager.initAsHost(name, "127.0.0.1")
+                        gameManager.startGame()
                         currentScreen = "game"
                     },
-                    onJoinGame = { name, service ->
-                        username = name
-                        timeLeft = 60 
-                        players = listOf(
-                            Player("1", service.serviceName, hasPotato = true),
-                            Player("me", name),
-                            Player("3", "Jugador 3")
-                        )
+                    onJoinGame = { name, _ ->
+                        gameManager.initAsClient(name, "127.0.0.1", "127.0.0.1")
                         currentScreen = "game"
                     },
-                    onRefreshDiscovery = {
-                        // Refresh logic
-                    }
+                    onRefreshDiscovery = {}
                 )
             } else if (currentScreen == "game") {
-                LaunchedEffect(currentScreen) {
-                    while (timeLeft > 0) {
-                        delay(1000)
-                        timeLeft--
-                    }
-                }
-
                 GameScreen(
                     players = players,
-                    currentPlayerId = currentPlayerId,
+                    currentPlayerId = localPlayerId,
                     timeLeftSeconds = timeLeft,
                     countdown = 0,
-                    onPassPotato = { targetId: String ->
-                        players = players.map { 
-                            it.copy(
-                                hasPotato = it.id == targetId,
-                                isRequesting = if (it.id == targetId) false else it.isRequesting
-                            ) 
+                    holdTimeMs = holdTimeMs,
+                    onPassPotato = { targetId ->
+                        if (gameManager.canPassPotato()) {
+                            gameManager.passPotatoToNext()
                         }
                     }
                 )

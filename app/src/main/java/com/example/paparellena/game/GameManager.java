@@ -22,6 +22,13 @@ public class GameManager {
     private Handler hostTimerHandler = new Handler(Looper.getMainLooper());
     private Runnable timerRunnable;
 
+    // Logic for potato holding constraints
+    private long potatoReceivedTime = 0;
+    private static final long MIN_HOLD_TIME_MS = 2500;
+    private static final long MAX_HOLD_TIME_MS = 5000;
+    private Handler burningHandler = new Handler(Looper.getMainLooper());
+    private Runnable burningRunnable;
+
     public interface GameEventListener {
         void onPlayerJoined(Player player);
         void onGameStarted(String starterId);
@@ -29,6 +36,7 @@ public class GameManager {
         void onPotatoPassed();
         void onGameOver(String loserId);
         void onTick(int seconds);
+        void onHoldTimeUpdate(long elapsedMs);
     }
     
     private GameEventListener listener;
@@ -60,12 +68,9 @@ public class GameManager {
 
             @Override
             public void onClientConnected(String ip) {
-                // El cliente se unirá enviando un mensaje TYPE_JOIN
             }
         });
         server.start();
-        
-        // El host también es su propio cliente
         initAsClient(name, ip, "localhost");
     }
 
@@ -103,17 +108,18 @@ public class GameManager {
                 isGameRunning = true;
                 if (listener != null) listener.onGameStarted(msg.getContent());
                 if (msg.getContent().equals(localPlayer.getId())) {
-                    localPlayer.setHasPotato(true);
-                    if (listener != null) listener.onPotatoReceived();
+                    onReceivePotato();
                 }
                 break;
             case GameMessage.TYPE_PASS_POTATO:
                 if (msg.getContent().equals(localPlayer.getId())) {
-                    localPlayer.setHasPotato(true);
-                    if (listener != null) listener.onPotatoReceived();
+                    onReceivePotato();
                 } else {
-                    localPlayer.setHasPotato(false);
-                    if (listener != null) listener.onPotatoPassed();
+                    onReleasePotato();
+                }
+                // Actualizar visualmente quién tiene la papa
+                for (Player p : players) {
+                    p.setHasPotato(p.getId().equals(msg.getContent()));
                 }
                 break;
             case GameMessage.TYPE_TICK:
@@ -123,8 +129,48 @@ public class GameManager {
             case GameMessage.TYPE_GAME_OVER:
                 isGameRunning = false;
                 stopTimer();
+                stopBurningCheck();
                 if (listener != null) listener.onGameOver(msg.getContent());
                 break;
+        }
+    }
+
+    private void onReceivePotato() {
+        localPlayer.setHasPotato(true);
+        potatoReceivedTime = System.currentTimeMillis();
+        if (listener != null) listener.onPotatoReceived();
+        startBurningCheck();
+    }
+
+    private void onReleasePotato() {
+        localPlayer.setHasPotato(false);
+        stopBurningCheck();
+        if (listener != null) listener.onPotatoPassed();
+    }
+
+    private void startBurningCheck() {
+        burningRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!localPlayer.isHasPotato()) return;
+                
+                long elapsed = System.currentTimeMillis() - potatoReceivedTime;
+                if (listener != null) listener.onHoldTimeUpdate(elapsed);
+
+                if (elapsed >= MAX_HOLD_TIME_MS) {
+                    // SE QUEMÓ
+                    broadcast(new GameMessage(GameMessage.TYPE_GAME_OVER, localPlayer.getId(), localPlayer.getId()));
+                } else {
+                    burningHandler.postDelayed(this, 100);
+                }
+            }
+        };
+        burningHandler.post(burningRunnable);
+    }
+
+    private void stopBurningCheck() {
+        if (burningRunnable != null) {
+            burningHandler.removeCallbacks(burningRunnable);
         }
     }
 
@@ -132,7 +178,7 @@ public class GameManager {
         if (!isHost || players.size() < 2) return;
         
         isGameRunning = true;
-        remainingTime = new Random().nextInt(20) + 10; // 10 a 30 segundos
+        remainingTime = new Random().nextInt(20) + 15; // 15 a 35 segundos
         
         int starterIdx = new Random().nextInt(players.size());
         String starterId = players.get(starterIdx).getId();
@@ -145,11 +191,11 @@ public class GameManager {
         timerRunnable = new Runnable() {
             @Override
             public void run() {
-                if (remainingTime > 0) {
+                if (remainingTime > 0 && isGameRunning) {
                     remainingTime--;
                     broadcast(new GameMessage(GameMessage.TYPE_TICK, localPlayer.getId(), String.valueOf(remainingTime)));
                     hostTimerHandler.postDelayed(this, 1000);
-                } else {
+                } else if (isGameRunning) {
                     String loserId = getPlayerWithPotatoId();
                     broadcast(new GameMessage(GameMessage.TYPE_GAME_OVER, localPlayer.getId(), loserId));
                 }
@@ -159,13 +205,20 @@ public class GameManager {
     }
 
     private String getPlayerWithPotatoId() {
-        // En una implementación real, el Host debería trackear quién tiene la papa
-        // o los clientes deberían reportar. Para simplificar, asumimos que el último PASS_POTATO define al perdedor.
-        return "current_holder_id"; 
+        for (Player p : players) {
+            if (p.isHasPotato()) return p.getId();
+        }
+        return localPlayer.getId(); 
+    }
+
+    public boolean canPassPotato() {
+        if (!localPlayer.isHasPotato()) return false;
+        long elapsed = System.currentTimeMillis() - potatoReceivedTime;
+        return elapsed >= MIN_HOLD_TIME_MS;
     }
 
     public void passPotatoToNext() {
-        if (!localPlayer.isHasPotato()) return;
+        if (!canPassPotato()) return;
         
         int myIdx = -1;
         for(int i=0; i<players.size(); i++) {
@@ -184,7 +237,7 @@ public class GameManager {
     private void broadcast(GameMessage msg) {
         if (isHost && server != null) {
             server.broadcast(msg);
-            handleMessage(msg); // Host procesa su propio mensaje
+            handleMessage(msg);
         } else if (client != null) {
             client.sendMessage(msg);
         }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -32,46 +34,41 @@ fun GameScreen(
     currentPlayerId: String,
     timeLeftSeconds: Int,
     countdown: Int,
+    holdTimeMs: Long,
     onPassPotato: (String) -> Unit
 ) {
     val context = LocalContext.current
     val currentPlayer = players.find { it.id == currentPlayerId }
     val hasPotato = currentPlayer?.hasPotato ?: false
     
+    // UI Constraints from logic
+    val minHoldTime = 2500L
+    val maxHoldTime = 5000L
+    val canPass = hasPotato && holdTimeMs >= minHoldTime
+    val isBurning = hasPotato && holdTimeMs > 3500L
+
     LaunchedEffect(hasPotato) {
         if (hasPotato) {
-            vibrate(context)
+            vibrate(context, 300)
         }
     }
 
-    // El tiempo de urgencia ahora es un misterio visual, se activa en los últimos 7 segundos
-    val isUrgent = timeLeftSeconds in 1..7
-    val infiniteTransition = rememberInfiniteTransition(label = "flash")
+    val infiniteTransition = rememberInfiniteTransition(label = "gameEffects")
     
-    val urgentColor by infiniteTransition.animateColor(
-        initialValue = Color.Red.copy(alpha = 0.5f),
-        targetValue = Color.Yellow.copy(alpha = 0.5f),
+    val burningColor by infiniteTransition.animateColor(
+        initialValue = Color(0xFFE74C3C), // hot_red
+        targetValue = Color(0xFFF39C12), // orange
         animationSpec = infiniteRepeatable(
-            animation = tween(200, easing = LinearEasing),
+            animation = tween(150, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "urgentBg"
-    )
-
-    val holdingColor by infiniteTransition.animateColor(
-        initialValue = Color.Red.copy(alpha = 0.1f),
-        targetValue = Color.Red.copy(alpha = 0.4f),
-        animationSpec = infiniteRepeatable(
-            animation = tween(400, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "holdingBg"
+        label = "burningBg"
     )
 
     val backgroundColor = when {
-        isUrgent -> urgentColor
-        hasPotato -> holdingColor
-        else -> MaterialTheme.colorScheme.background
+        isBurning -> burningColor
+        hasPotato -> Color(0xFFD2B48C).copy(alpha = 0.3f) // potato_light
+        else -> Color(0xFFFDF5E6) // OldLace / Cream
     }
 
     Box(
@@ -91,19 +88,43 @@ fun GameScreen(
                         text = countdown.toString(),
                         fontSize = 120.sp,
                         fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.primary
+                        color = Color(0xFF8B4513) // potato_brown
                     )
                 }
             } else {
                 Text(
-                    text = if (hasPotato) "¡TIENES LA PAPA!" else "¡ATENTO!",
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(vertical = 24.dp),
-                    color = if (hasPotato || isUrgent) Color.Black else MaterialTheme.colorScheme.onBackground
+                    text = if (hasPotato) "¡TIENES LA PAPA!" else "¡PREPÁRATE!",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = if (isBurning) Color.Red else Color(0xFF5D4037),
+                    modifier = Modifier.padding(top = 32.dp, bottom = 8.dp)
                 )
 
-                // El temporizador numérico ha sido eliminado para mayor suspenso
+                if (hasPotato) {
+                    val progressValue = (holdTimeMs.toFloat() / maxHoldTime).coerceIn(0f, 1f)
+                    val progressColor = if (holdTimeMs < minHoldTime) Color.Gray else if (isBurning) Color.Red else Color(0xFFF4D03F)
+                    
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = if (holdTimeMs < minHoldTime) "¡No la sueltes! (${(minHoldTime - holdTimeMs)/1000f}s)" else "¡PÁSALA YA!",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = progressColor
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { progressValue },
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f)
+                                .height(12.dp)
+                                .clip(RoundedCornerShape(6.dp)),
+                            color = progressColor,
+                            trackColor = Color.LightGray
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
 
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
@@ -114,7 +135,7 @@ fun GameScreen(
                         PlayerItem(
                             player = player,
                             isSelf = player.id == currentPlayerId,
-                            canReceive = hasPotato && player.id != currentPlayerId,
+                            canReceive = canPass && player.id != currentPlayerId,
                             onClick = { onPassPotato(player.id) }
                         )
                     }
@@ -134,16 +155,18 @@ fun PlayerItem(
     Card(
         modifier = Modifier
             .padding(8.dp)
-            .aspectRatio(1f)
+            .aspectRatio(0.9f)
             .clickable(enabled = canReceive) { onClick() }
             .border(
-                width = if (player.hasPotato) 4.dp else 1.dp,
-                color = if (player.hasPotato) Color.Red else Color.Gray,
-                shape = MaterialTheme.shapes.medium
+                width = if (player.hasPotato) 4.dp else 2.dp,
+                color = if (player.hasPotato) Color(0xFFE74C3C) else Color(0xFF8B4513),
+                shape = RoundedCornerShape(16.dp)
             ),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (player.hasPotato) Color.Red.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surface
-        )
+            containerColor = if (player.hasPotato) Color(0xFFFADBD8) else Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -152,28 +175,30 @@ fun PlayerItem(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     modifier = Modifier
-                        .size(60.dp)
+                        .size(64.dp)
                         .clip(CircleShape)
-                        .background(if (player.hasPotato) Color.Red else Color.LightGray),
+                        .background(if (player.hasPotato) Color(0xFFF4D03F) else Color(0xFFD2B48C)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = if (player.hasPotato) "🥔" else "👤",
-                        fontSize = 32.sp
+                        fontSize = 36.sp
                     )
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = if (isSelf) "${player.name} (Tú)" else player.name,
+                    text = if (isSelf) "Tú" else player.name,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
+                    fontSize = 18.sp,
+                    color = Color(0xFF5D4037),
+                    textAlign = TextAlign.Center
                 )
             }
         }
     }
 }
 
-private fun vibrate(context: Context) {
+private fun vibrate(context: Context, duration: Long) {
     val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
         vibratorManager.defaultVibrator
@@ -183,9 +208,9 @@ private fun vibrate(context: Context) {
     }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        vibrator.vibrate(VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE))
+        vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
     } else {
         @Suppress("DEPRECATION")
-        vibrator.vibrate(300)
+        vibrator.vibrate(duration)
     }
 }
