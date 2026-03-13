@@ -1,24 +1,32 @@
- package com.example.paparellena.ui
+package com.example.paparellena.ui
 
+import android.net.nsd.NsdServiceInfo
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun MenuScreen(
+fun MenuScreenContent(
+    discoveredGames: List<NsdServiceInfo>,
     onHostGame: (String, Int) -> Unit, // username, timeInMinutes
-    onJoinGame: (String) -> Unit // username
+    onJoinGame: (String, NsdServiceInfo) -> Unit, // username, service
+    onRefreshDiscovery: () -> Unit
 ) {
     var showHostDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
+    var selectedService by remember { mutableStateOf<NsdServiceInfo?>(null) }
     var username by remember { mutableStateOf("") }
     
     val timeOptions = listOf(1, 2, 4)
@@ -38,23 +46,56 @@ fun MenuScreen(
             color = MaterialTheme.colorScheme.primary
         )
         
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
         
-        Button(
-            onClick = { showHostDialog = true },
-            modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
+        Text("Partidas Disponibles:", fontWeight = FontWeight.Bold)
+        
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(vertical = 16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            Text("Crear Partida (Host)", fontSize = 18.sp)
+            if (discoveredGames.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Buscando partidas...", color = Color.Gray)
+                }
+            } else {
+                LazyColumn {
+                    items(discoveredGames) { service ->
+                        ListItem(
+                            headlineContent = { Text(service.serviceName) },
+                            supportingContent = { 
+                                val hostAddr = service.host?.hostAddress ?: "Resolviendo..."
+                                Text("$hostAddr:${service.port}") 
+                            },
+                            modifier = Modifier.clickable {
+                                selectedService = service
+                                showJoinDialog = true
+                            }
+                        )
+                        HorizontalDivider()
+                    }
+                }
+            }
         }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Button(
-            onClick = { showJoinDialog = true },
-            modifier = Modifier.fillMaxWidth(0.8f).height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-        ) {
-            Text("Unirse a Partida", fontSize = 18.sp)
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = onRefreshDiscovery,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Refrescar")
+            }
+            
+            Button(
+                onClick = { showHostDialog = true },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+            ) {
+                Text("Crear Partida")
+            }
         }
     }
 
@@ -67,7 +108,7 @@ fun MenuScreen(
                     OutlinedTextField(
                         value = username,
                         onValueChange = { username = it },
-                        label = { Text("Tu Nombre") },
+                        label = { Text("Tu Nombre (Nombre de la Partida)") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -88,7 +129,7 @@ fun MenuScreen(
                             ) {
                                 RadioButton(
                                     selected = (time == selectedTime),
-                                    onClick = null // null because of selectable
+                                    onClick = null 
                                 )
                                 Text(
                                     text = "$time min",
@@ -120,10 +161,10 @@ fun MenuScreen(
         )
     }
 
-    if (showJoinDialog) {
+    if (showJoinDialog && selectedService != null) {
         AlertDialog(
             onDismissRequest = { showJoinDialog = false },
-            title = { Text("Unirse a Partida") },
+            title = { Text("Unirse a: ${selectedService?.serviceName}") },
             text = {
                 OutlinedTextField(
                     value = username,
@@ -136,12 +177,12 @@ fun MenuScreen(
                 Button(
                     onClick = {
                         if (username.isNotBlank()) {
-                            onJoinGame(username)
+                            onJoinGame(username, selectedService!!)
                             showJoinDialog = false
                         }
                     }
                 ) {
-                    Text("Unirse")
+                    Text("Entrar")
                 }
             },
             dismissButton = {

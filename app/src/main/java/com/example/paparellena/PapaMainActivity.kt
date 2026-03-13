@@ -1,11 +1,12 @@
 package com.example.paparellena
 
+import android.net.nsd.NsdServiceInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import com.example.paparellena.ui.GameScreen
-import com.example.paparellena.ui.MenuScreen
+import com.example.paparellena.ui.MenuScreenContent
 import com.example.paparellena.ui.Player
 import kotlinx.coroutines.delay
 
@@ -15,8 +16,10 @@ class PapaMainActivity : ComponentActivity() {
         setContent {
             var currentScreen by remember { mutableStateOf("menu") }
             var username by remember { mutableStateOf("") }
-            var gameTimeMinutes by remember { mutableIntStateOf(1) }
             
+            // Discovery State
+            val discoveredGames by remember { mutableStateOf(listOf<NsdServiceInfo>()) }
+
             // Game State
             var players by remember { 
                 mutableStateOf(listOf<Player>()) 
@@ -25,10 +28,10 @@ class PapaMainActivity : ComponentActivity() {
             val currentPlayerId = "me"
 
             if (currentScreen == "menu") {
-                MenuScreen(
+                MenuScreenContent(
+                    discoveredGames = discoveredGames,
                     onHostGame = { name, time ->
                         username = name
-                        gameTimeMinutes = time
                         timeLeft = time * 60
                         players = listOf(
                             Player("me", name, hasPotato = true),
@@ -38,19 +41,21 @@ class PapaMainActivity : ComponentActivity() {
                         )
                         currentScreen = "game"
                     },
-                    onJoinGame = { name ->
+                    onJoinGame = { name, service ->
                         username = name
                         timeLeft = 60 
                         players = listOf(
-                            Player("1", "Host", hasPotato = true),
+                            Player("1", service.serviceName, hasPotato = true),
                             Player("me", name),
                             Player("3", "Jugador 3")
                         )
                         currentScreen = "game"
+                    },
+                    onRefreshDiscovery = {
+                        // Refresh logic
                     }
                 )
             } else if (currentScreen == "game") {
-                // Timer logic
                 LaunchedEffect(currentScreen) {
                     while (timeLeft > 0) {
                         delay(1000)

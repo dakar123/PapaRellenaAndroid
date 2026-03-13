@@ -41,15 +41,30 @@ public class Server {
                     if (callback != null) callback.onClientConnected(socket.getInetAddress().getHostAddress());
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                if (isRunning) e.printStackTrace();
             }
         }).start();
     }
 
+    public void stop() {
+        isRunning = false;
+        try {
+            if (serverSocket != null) serverSocket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        for (ClientHandler client : clients) {
+            client.stop();
+        }
+        clients.clear();
+    }
+
     public void broadcast(GameMessage message) {
         String json = gson.toJson(message);
-        for (ClientHandler client : clients) {
-            client.sendMessage(json);
+        synchronized (clients) {
+            for (ClientHandler client : clients) {
+                client.sendMessage(json);
+            }
         }
     }
 
@@ -57,6 +72,7 @@ public class Server {
         private Socket socket;
         private PrintWriter out;
         private BufferedReader in;
+        private boolean active = true;
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
@@ -68,18 +84,29 @@ public class Server {
                 out = new PrintWriter(socket.getOutputStream(), true);
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 String line;
-                while ((line = in.readLine()) != null) {
+                while (active && (line = in.readLine()) != null) {
                     GameMessage msg = gson.fromJson(line, GameMessage.class);
                     if (callback != null) callback.onMessageReceived(msg);
-                    broadcast(msg); // Reenviar a todos
+                    broadcast(msg); // Forward to everyone
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                if (active) e.printStackTrace();
+            } finally {
+                stop();
             }
         }
 
         public void sendMessage(String json) {
             if (out != null) out.println(json);
+        }
+
+        public void stop() {
+            active = false;
+            try {
+                if (socket != null) socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 }
