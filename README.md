@@ -1,4 +1,5 @@
-<h1>ESTRURTURA</h1>
+<h1>TU PAPA RELLENA</h1>
+<h1>ESTRUCTURA</h1>
 <ul>
   <li>app
     <ul>
